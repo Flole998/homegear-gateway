@@ -215,8 +215,8 @@ void getExecutablePath(int argc, char* argv[])
 		exit(1);
 	}
 	path[sizeof(path) - 1] = '\0';
-	GD::executablePath = std::string(path);
-	GD::executablePath = GD::executablePath.substr(0, GD::executablePath.find_last_of("/") + 1);
+	Gd::executablePath = std::string(path);
+	Gd::executablePath = Gd::executablePath.substr(0, Gd::executablePath.find_last_of("/") + 1);
 #else
 	int length = readlink("/proc/self/exe", path, sizeof(path) - 1);
 	if (length < 0)
