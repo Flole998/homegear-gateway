@@ -130,7 +130,6 @@ void MaxCc1101::mainThread()
         int32_t pollResult;
         int32_t bytesRead;
         std::vector<char> readBuffer({'0'});
-        bool rxMutexLocked = false;
 
         while(!_stopCallbackThread)
         {
@@ -179,7 +178,7 @@ void MaxCc1101::mainThread()
                     if(!bytesRead) continue;
                     if(readBuffer.at(0) == 0x30)
                     {
-                        if(!_sending && !rxMutexLocked) rxMutexLocked = _txMutex.try_lock(); //We are receiving, don't send now
+                        if(!_sending) _txMutex.try_lock(); //We are receiving, don't send now
                         continue; //Packet is being received. Wait for GDO high
                     }
                     if(_sending)
@@ -202,11 +201,7 @@ void MaxCc1101::mainThread()
                                 {
                                     Gd::out.printWarning("Warning: Too large packet received: " + BaseLib::HelperFunctions::getHexString(packetBytes));
                                     closeDevice();
-                                    if(rxMutexLocked)
-                                    {
-                                        _txMutex.unlock();
-                                        rxMutexLocked = false;
-                                    }
+                                    _txMutex.unlock();
                                     continue;
                                 }
                             }
@@ -219,11 +214,7 @@ void MaxCc1101::mainThread()
                             sendCommandStrobe(CommandStrobes::Enum::SFRX);
                             sendCommandStrobe(CommandStrobes::Enum::SRX);
                         }
-                        if(rxMutexLocked)
-                        {
-                            _txMutex.unlock();
-                            rxMutexLocked = false;
-                        }
+                        _txMutex.unlock();
                         if(!packet.empty())
                         {
                             if(_firstPacket) _firstPacket = false;
@@ -249,7 +240,6 @@ void MaxCc1101::mainThread()
                 else if(pollResult < 0)
                 {
                     _txMutex.unlock();
-                    rxMutexLocked = false;
                     Gd::out.printError("Error: Could not poll gpio: " + std::string(strerror(errno)) + ". Reopening...");
                     _gpio->closeDevice(Gd::settings.gpio1());
                     std::this_thread::sleep_for(std::chrono::milliseconds(1000));
@@ -260,7 +250,6 @@ void MaxCc1101::mainThread()
             catch(const std::exception& ex)
             {
                 _txMutex.unlock();
-                rxMutexLocked = false;
                 Gd::out.printEx(__FILE__, __LINE__, __PRETTY_FUNCTION__, ex.what());
             }
         }
