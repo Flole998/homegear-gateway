@@ -193,6 +193,10 @@ void UPnP::processPacket(BaseLib::Http &http) {
 
 void UPnP::setPackets() {
   try {
+    if (!Gd::rpcServer) {
+      Gd::out.printError("Error: Cannot set UPnP packets. RPC server is not initialized.");
+      return;
+    }
     std::string notifyPacketBase =
         "NOTIFY * HTTP/1.1\r\nHOST: 239.255.255.250:1900\r\nCACHE-CONTROL: max-age=1800\r\nSERVER: Homegear Gateway " + std::string(VERSION) + "\r\nLOCATION: " + "binrpcs://" + _address + ":" + std::to_string(Gd::settings.port())
             + "/\r\nHG-FAMILY-ID: " + std::to_string(Gd::rpcServer->familyId()) + "\r\nHG-GATEWAY-CONFIGURED: " + (Gd::rpcServer->isUnconfigured() ? "0" : "1") + "\r\nHG-GATEWAY-PORT-UNCONFIGURED: " + std::to_string(Gd::settings.portUnconfigured())

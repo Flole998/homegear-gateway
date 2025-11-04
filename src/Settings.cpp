@@ -105,7 +105,10 @@ void Settings::load(std::string filename, std::string executablePath)
 			if(input[0] == '#') continue;
 			len = strlen(input);
 			if (len < 2) continue;
-			if (input[len-1] == '\n') input[len-1] = '\0';
+			if (input[len-1] == '\n') {
+				input[len-1] = '\0';
+				len--;
+			}
 			ptr = 0;
 			found = false;
 			while(ptr < len)

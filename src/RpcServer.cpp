@@ -214,23 +214,28 @@ BaseLib::PVariable RpcServer::configure(BaseLib::PArray &parameters) {
     if (dataIterator == data->structValue->end()) return BaseLib::Variable::createError(-1, "Data does not contain element \"caCert\".");
     std::string certPath = Gd::settings.dataPath() + "ca.crt";
     BaseLib::Io::writeFile(certPath, dataIterator->second->stringValue);
+    
+    uid_t userId = Gd::bl->hf.userId(Gd::runAsUser);
+    gid_t groupId = Gd::bl->hf.groupId(Gd::runAsGroup);
+    
+    if (chown(certPath.c_str(), userId, groupId) == -1) Gd::out.printWarning("Warning: Could not set owner on " + certPath + ": " + std::string(strerror(errno)));
+    if (chmod(certPath.c_str(), S_IRUSR | S_IWUSR) == -1) Gd::out.printWarning("Warning: Could not set permissions on " + certPath + ": " + std::string(strerror(errno)));
 
     dataIterator = data->structValue->find("gatewayCert");
     if (dataIterator == data->structValue->end()) return BaseLib::Variable::createError(-1, "Data does not contain element \"gatewayCert\".");
     certPath = Gd::settings.dataPath() + "gateway.crt";
     BaseLib::Io::writeFile(certPath, dataIterator->second->stringValue);
+    
+    if (chown(certPath.c_str(), userId, groupId) == -1) Gd::out.printWarning("Warning: Could not set owner on " + certPath + ": " + std::string(strerror(errno)));
+    if (chmod(certPath.c_str(), S_IRUSR | S_IWUSR) == -1) Gd::out.printWarning("Warning: Could not set permissions on " + certPath + ": " + std::string(strerror(errno)));
 
     dataIterator = data->structValue->find("gatewayKey");
     if (dataIterator == data->structValue->end()) return BaseLib::Variable::createError(-1, "Data does not contain element \"gatewayKey\".");
     certPath = Gd::settings.dataPath() + "gateway.key";
     BaseLib::Io::writeFile(certPath, dataIterator->second->stringValue);
 
-    uid_t userId = Gd::bl->hf.userId(Gd::runAsUser);
-    gid_t groupId = Gd::bl->hf.groupId(Gd::runAsGroup);
-
-    if (chown(certPath.c_str(), userId, groupId) == -1) Gd::out.printWarning("Warning: Could net set owner on " + certPath + ": " + std::string(strerror(errno)));
-    if (chmod(certPath.c_str(), S_IRUSR | S_IWUSR) == -1) Gd::out.printWarning("Warning: Could net set permissions on " + certPath + ": " + std::string(strerror(errno)));;
-
+    if (chown(certPath.c_str(), userId, groupId) == -1) Gd::out.printWarning("Warning: Could not set owner on " + certPath + ": " + std::string(strerror(errno)));
+    if (chmod(certPath.c_str(), S_IRUSR | S_IWUSR) == -1) Gd::out.printWarning("Warning: Could not set permissions on " + certPath + ": " + std::string(strerror(errno)));
     Gd::out.printMessage("Remote configuration was successful.");
 
     return std::make_shared<BaseLib::Variable>();

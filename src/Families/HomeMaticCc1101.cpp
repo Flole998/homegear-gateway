@@ -207,17 +207,17 @@ void HomeMaticCc1101::mainThread()
                                     continue;
                                 }
                             }
-                            else if(encodedData.size() >= 9)
+                            else if(encodedData.size() >= 9 && firstByte + 2 <= encodedData.size())
                             {
                                 decodedData[0] = firstByte;
                                 decodedData[1] = (~encodedData[1]) ^ 0x89;
                                 uint32_t i = 2;
-                                for(; i < firstByte; i++)
+                                for(; i < firstByte && i < encodedData.size(); i++)
                                 {
                                     decodedData[i] = (encodedData[i - 1] + 0xDC) ^ encodedData[i];
                                 }
-                                decodedData[i] = encodedData[i] ^ decodedData[2];
-                                decodedData[i + 1] = encodedData[i + 1]; //RSSI_DEVICE
+                                if(i < encodedData.size()) decodedData[i] = encodedData[i] ^ decodedData[2];
+                                if(i + 1 < encodedData.size()) decodedData[i + 1] = encodedData[i + 1]; //RSSI_DEVICE
 
                                 packet = BaseLib::HelperFunctions::getHexString(decodedData);
                             }
