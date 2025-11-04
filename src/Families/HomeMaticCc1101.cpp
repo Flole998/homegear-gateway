@@ -132,6 +132,7 @@ void HomeMaticCc1101::mainThread()
         int32_t pollResult;
         int32_t bytesRead;
         std::vector<char> readBuffer({'0'});
+        bool rxMutexLocked = false;
 
         while(!_stopCallbackThread)
         {
@@ -180,7 +181,7 @@ void HomeMaticCc1101::mainThread()
                     if(!bytesRead) continue;
                     if(readBuffer.at(0) == 0x30)
                     {
-                        if(!_sending) _txMutex.try_lock(); //We are receiving, don't send now
+                        if(!_sending && !rxMutexLocked) rxMutexLocked = _txMutex.try_lock(); //We are receiving, don't send now
                         continue; //Packet is being received. Wait for GDO high
                     }
                     if(_sending)
@@ -203,7 +204,11 @@ void HomeMaticCc1101::mainThread()
                                 {
                                     Gd::out.printWarning("Warning: Too large packet received: " + BaseLib::HelperFunctions::getHexString(encodedData));
                                     closeDevice();
-                                    _txMutex.unlock();
+                                    if(rxMutexLocked)
+                                    {
+                                        _txMutex.unlock();
+                                        rxMutexLocked = false;
+                                    }
                                     continue;
                                 }
                             }
@@ -229,7 +234,11 @@ void HomeMaticCc1101::mainThread()
                             sendCommandStrobe(CommandStrobes::Enum::SFRX);
                             sendCommandStrobe(CommandStrobes::Enum::SRX);
                         }
-                        _txMutex.unlock();
+                        if(rxMutexLocked)
+                        {
+                            _txMutex.unlock();
+                            rxMutexLocked = false;
+                        }
                         if(!packet.empty())
                         {
                             if(_firstPacket) _firstPacket = false;
@@ -255,6 +264,7 @@ void HomeMaticCc1101::mainThread()
                 else if(pollResult < 0)
                 {
                     _txMutex.unlock();
+                    rxMutexLocked = false;
                     Gd::out.printError("Error: Could not poll gpio: " + std::string(strerror(errno)) + ". Reopening...");
                     _gpio->closeDevice(Gd::settings.gpio1());
                     std::this_thread::sleep_for(std::chrono::milliseconds(1000));
@@ -265,6 +275,7 @@ void HomeMaticCc1101::mainThread()
             catch(const std::exception& ex)
             {
                 _txMutex.unlock();
+                rxMutexLocked = false;
                 Gd::out.printEx(__FILE__, __LINE__, __PRETTY_FUNCTION__, ex.what());
             }
         }

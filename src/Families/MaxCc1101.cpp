@@ -130,6 +130,7 @@ void MaxCc1101::mainThread()
         int32_t pollResult;
         int32_t bytesRead;
         std::vector<char> readBuffer({'0'});
+        bool rxMutexLocked = false;
 
         while(!_stopCallbackThread)
         {
@@ -178,7 +179,7 @@ void MaxCc1101::mainThread()
                     if(!bytesRead) continue;
                     if(readBuffer.at(0) == 0x30)
                     {
-                        if(!_sending) _txMutex.try_lock(); //We are receiving, don't send now
+                        if(!_sending && !rxMutexLocked) rxMutexLocked = _txMutex.try_lock(); //We are receiving, don't send now
                         continue; //Packet is being received. Wait for GDO high
                     }
                     if(_sending)
@@ -201,7 +202,11 @@ void MaxCc1101::mainThread()
                                 {
                                     Gd::out.printWarning("Warning: Too large packet received: " + BaseLib::HelperFunctions::getHexString(packetBytes));
                                     closeDevice();
-                                    _txMutex.unlock();
+                                    if(rxMutexLocked)
+                                    {
+                                        _txMutex.unlock();
+                                        rxMutexLocked = false;
+                                    }
                                     continue;
                                 }
                             }
@@ -214,7 +219,11 @@ void MaxCc1101::mainThread()
                             sendCommandStrobe(CommandStrobes::Enum::SFRX);
                             sendCommandStrobe(CommandStrobes::Enum::SRX);
                         }
-                        _txMutex.unlock();
+                        if(rxMutexLocked)
+                        {
+                            _txMutex.unlock();
+                            rxMutexLocked = false;
+                        }
                         if(!packet.empty())
                         {
                             if(_firstPacket) _firstPacket = false;
@@ -240,6 +249,7 @@ void MaxCc1101::mainThread()
                 else if(pollResult < 0)
                 {
                     _txMutex.unlock();
+                    rxMutexLocked = false;
                     Gd::out.printError("Error: Could not poll gpio: " + std::string(strerror(errno)) + ". Reopening...");
                     _gpio->closeDevice(Gd::settings.gpio1());
                     std::this_thread::sleep_for(std::chrono::milliseconds(1000));
@@ -250,6 +260,7 @@ void MaxCc1101::mainThread()
             catch(const std::exception& ex)
             {
                 _txMutex.unlock();
+                rxMutexLocked = false;
                 Gd::out.printEx(__FILE__, __LINE__, __PRETTY_FUNCTION__, ex.what());
             }
         }
@@ -675,8 +686,18 @@ BaseLib::PVariable MaxCc1101::sendPacket(BaseLib::PArray& parameters)
 
         std::vector<uint8_t> packetBytes = _bl->hf.getUBinary(parameters->at(1)->stringValue);
 
+        int64_t timeBeforeLock = BaseLib::HelperFunctions::getTime();
         _sendingPending = true;
-        _txMutex.lock();
+        if(!_txMutex.try_lock_for(std::chrono::milliseconds(10000)))
+        {
+            Gd::out.printCritical("Critical: Could not acquire lock for sending packet. This should never happen. Please report this error.");
+            _txMutex.unlock();
+            if(!_txMutex.try_lock_for(std::chrono::milliseconds(100)))
+            {
+                _sendingPending = false;
+                return BaseLib::Variable::createError(-2, "Could not acquire lock for sending packet.");
+            }
+        }
         _sendingPending = false;
         if(_stopCallbackThread || _fileDescriptor->descriptor == -1 || !_gpio->isOpen(Gd::settings.gpio1()) || _stopped)
         {
@@ -686,6 +707,10 @@ BaseLib::PVariable MaxCc1101::sendPacket(BaseLib::PArray& parameters)
         _sending = true;
         sendCommandStrobe(CommandStrobes::Enum::SIDLE);
         sendCommandStrobe(CommandStrobes::Enum::SFTX);
+        if(BaseLib::HelperFunctions::getTime() - timeBeforeLock > 100)
+        {
+            Gd::out.printWarning("Warning: Timing problem. Sending took more than 100ms. Do you have enough system resources?");
+        }
         if(parameters->at(2)->booleanValue) //WOR packet
         {
             sendCommandStrobe(CommandStrobes::Enum::STX);
